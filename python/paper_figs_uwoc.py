@@ -445,7 +445,7 @@ def fig_qber_vs_irradiance():
 # FIG 8 — fixed vs adaptive, the only figure that uses the adaptive phase
 # ═══════════════════════════════════════════════════════════════════════════
 def fig_adaptive(rows):
-    """QBER and SKR vs range for both phases on shared axes.
+    """QBER and SKR vs range for both phases, as TWO separate figures.
 
     In PC-input mode the PC supplies the bases, so adapt_basis_prob is bypassed
     (top_module.v:280-283). What the controller still changes is active_lambda,
@@ -453,11 +453,17 @@ def fig_adaptive(rows):
     support is "the controller picks λ/power per channel state", not "it biases
     the basis". Note that tx_permitted = 0 (controller PAUSE) produces a point
     with no clicks at all: that is a result, not a failed measurement.
+
+    The two panels used to share one FIGW2-wide canvas, which the paper then
+    shrank into a single \\columnwidth — halving every tick label. They are now
+    two \\columnwidth figures at full size; the shared loop below keeps the
+    series definitions identical between them.
     """
     F, A = pick(rows, "A_dist", "fixed"), pick(rows, "A_dist", "adaptive")
     if not F or not A:
         return
-    fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(FIGW2, 2.8))
+    fig1, ax1 = plt.subplots(figsize=(FIGW, 2.7))
+    fig2, ax2 = plt.subplots(figsize=(FIGW, 2.7))
 
     for rr, lab, col, mk in ((F, "Fixed", C_MODEL, "o"),
                              (A, "Adaptive", C_FPGA, "s")):
@@ -476,14 +482,14 @@ def fig_adaptive(rows):
 
     ax1.axhline(QBER_LIMIT * 100, color=C_LIMIT, ls="--", lw=1.2,
                 label="11% bound")
-    ax1.set_xlabel("Link distance, $d$ (m)")
     ax1.set_ylabel("QBER (%)")
-    ax2.set_xlabel("Link distance, $d$ (m)")
     ax2.set_ylabel("Secure key rate (bits/pulse)")
     for ax in (ax1, ax2):
+        ax.set_xlabel("Link distance, $d$ (m)")
         ax.grid(True, alpha=0.3, which="both")
         ax.legend(framealpha=0.0)
-    _save(fig, "fig_uwoc_fixed_vs_adaptive.png")
+    _save(fig1, "fig_uwoc_adaptive_qber.png")
+    _save(fig2, "fig_uwoc_adaptive_skr.png")
 
 
 # ═══════════════════════════════════════════════════════════════════════════
@@ -757,6 +763,11 @@ def fig_adaptive_gain(rows):
 def fig_block_dispersion():
     """Measured vs simulated spread of the per-block QBER, per turbulence level.
 
+    Emitted as TWO \\columnwidth figures — mean, then std/outage — rather than one
+    double-width canvas squeezed into a single column. The std panel in
+    particular carries a twin axis and four series, and was the first thing to
+    become unreadable at half scale.
+
     Every other figure in this script validates a MEAN. This one validates a
     VARIANCE, which is the quantity the coherence-block fix of [v12] exists to
     make observable at all — with h resampled per qubit the measured spread
@@ -767,7 +778,7 @@ def fig_block_dispersion():
     """
     p = os.path.join(DATA, "block_table.csv")
     if not os.path.exists(p):
-        print("  (bỏ qua fig_uwoc_block_dispersion: chưa có block_table.csv)")
+        print("  (bỏ qua fig_uwoc_block_qber_*: chưa có block_table.csv)")
         return
     # FIXED ONLY. "_B_turb_" alone would also match adaptive_B_turb_L*, and the
     # two phases would then be sorted together into one series with five
@@ -780,7 +791,7 @@ def fig_block_dispersion():
             if r["tag"].startswith("fixed_B_turb_"):
                 B.append(r)
     if len(B) < 3:
-        print("  (bỏ qua fig_uwoc_block_dispersion: %d điểm mục B)" % len(B))
+        print("  (bỏ qua fig_uwoc_block_qber_*: %d điểm mục B)" % len(B))
         return
     B.sort(key=lambda r: int(r["turb"]))
 
@@ -792,7 +803,8 @@ def fig_block_dispersion():
     mean_m = np.array([float(r["qber_win_mean_pct"]) for r in B])
     mean_s = np.array([float(r["sim_qber_win_mean_pct"]) for r in B])
 
-    fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(FIGW2, 2.6))
+    fig1, ax1 = plt.subplots(figsize=(FIGW, 2.7))
+    fig2, ax2 = plt.subplots(figsize=(FIGW, 2.7))
     w = 0.35
 
     # The per-block QBER is strongly right-skewed at high turbulence (Weibull h),
@@ -822,14 +834,15 @@ def fig_block_dispersion():
     ax2.set_ylabel("Std of block QBER (%)")
     h1, l1 = ax2.get_legend_handles_labels()
     h2, l2 = ax2b.get_legend_handles_labels()
-    ax2.legend(h1 + h2, l1 + l2, framealpha=0.0, fontsize=6)
+    ax2.legend(h1 + h2, l1 + l2, framealpha=0.0, fontsize=7)
 
     for ax in (ax1, ax2):
         ax.set_xlabel("Ocean turbulence level")
         ax.set_xticks(lv)
         ax.set_xticklabels(["L%d" % v for v in lv])
         ax.grid(True, alpha=0.3)
-    _save(fig, "fig_uwoc_block_dispersion.png")
+    _save(fig1, "fig_uwoc_block_qber_mean.png")
+    _save(fig2, "fig_uwoc_block_qber_std.png")
 
 
 # ═══════════════════════════════════════════════════════════════════════════
