@@ -1,54 +1,54 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 """
-sim_table.py — Bảng MÔ PHỎNG toàn ma trận + bảng SO SÁNH với số đo FPGA
+sim_table.py — Full matrix SIMULATION table + COMPARISON table with FPGA measurements
 ═══════════════════════════════════════════════════════════════════════════════
 
-KHÔNG chạm vào cổng COM: script này chỉ đọc data/fpga_points.csv (+ data/clicks_*.csv)
-và tính lại mô hình. An toàn để chạy song song với một phiên fpga_collect.py đang đo.
+DO NOT touch the COM port: this script only reads data/fpga_points.csv (+ data/clicks_*.csv)
+and recalculates the model. Safe to run in parallel with an active fpga_collect.py session.
 
-Ba bảng, ba mục đích khác nhau:
+Three tables, three different purposes:
 
-  [1] --matrix  BẢNG MÔ PHỎNG (data/sim_table.csv)
-      Toàn bộ ma trận nước × mức nhiễu loạn × cự ly × bước sóng, tính bằng mô hình
-      giải tích + thống kê cửa sổ. Đây là bảng "kết quả lý thuyết" cho bài báo và
-      cũng là bảng cho biết ĐIỂM NÀO ĐÁNG ĐO trên phần cứng: những dòng chỉ khác
-      nhau ở cột std/outage mà giống hệt nhau ở cột P_click/QBER thì đo lại trên
-      FPGA cũng ra đúng một đường cong.
+  [1] --matrix  SIMULATION TABLE (data/sim_table.csv)
+      Entire matrix of water × turbulence level × distance × wavelength, calculated using
+      analytical model + window statistics. This is the "theoretical result" table for the
+      paper and also indicates WHICH POINTS ARE WORTH MEASURING on hardware: rows that
+      differ only in the std/outage column but are identical in the P_click/QBER column
+      will yield the exact same curve when measured on the FPGA.
 
-  [2] --compare  BẢNG SO SÁNH (data/compare_table.csv + .md)
-      Ghép từng điểm đã đo với dự đoán mô hình: tỉ số P_click, z-score Poisson,
-      khoảng Clopper-Pearson của QBER đo có chứa QBER mô hình hay không, và
-      σ² của trường fading suy ra từ cột irrad trong clicks_*.csv.
+  [2] --compare  COMPARISON TABLE (data/compare_table.csv + .md)
+      Matches each measured point with the model prediction: P_click ratio, Poisson z-score,
+      whether the Clopper-Pearson interval of the measured QBER contains the model QBER,
+      and the fading field σ² derived from the irrad column in clicks_*.csv.
 
-  [3] --blocks  BẢNG THEO KHỐI KẾT HỢP (data/block_table.csv)
-      Chỉ chạy được với số liệu thu bằng bitstream [v12] và --coh >= 1: khi đó
-      mỗi khối 2^(coh+5) qubit là MỘT mẫu fading đóng băng, nên QBER của từng
-      khối là đại lượng đo được thật. Bảng đối chiếu trung bình / độ lệch chuẩn /
-      outage theo khối với UWOCChannel.window_statistics(window = 2^(coh+5)).
-      ĐÂY là chỗ L1…L5 tách nhau ra; QBER GỘP thì không — xem ghi chú dưới.
+  [3] --blocks  COMBINED BLOCK TABLE (data/block_table.csv)
+      Only runs with data collected using bitstream [v12] and --coh >= 1: in this case,
+      each block of 2^(coh+5) qubits is ONE frozen fading sample, so the QBER of each
+      block is a genuinely measurable quantity. The table compares the per-block mean /
+      standard deviation / outage with UWOCChannel.window_statistics(window = 2^(coh+5)).
+      THIS is where L1…L5 separate; POOLED QBER DOES NOT — see notes below.
 
-Chạy:
-    python python/sim_table.py                      # cả ba bảng
-    python python/sim_table.py --matrix             # chỉ bảng mô phỏng
-    python python/sim_table.py --compare            # chỉ bảng so sánh
-    python python/sim_table.py --blocks             # chỉ bảng theo khối
+Run:
+    python python/sim_table.py                      # all three tables
+    python python/sim_table.py --matrix             # simulation table only
+    python python/sim_table.py --compare            # comparison table only
+    python python/sim_table.py --blocks             # block table only
     python python/sim_table.py --matrix --lams 450,532,650
 
-VÌ SAO QBER GỘP KHÔNG THẤY NHIỄU LOẠN:
-    fpga_collect ghi ra tổng lỗi / tổng bit sàng, tức trung bình CÓ TRỌNG SỐ theo
-    số click. Khối bị fade sâu đóng góp rất ít click nên bị đánh trọng số nhẹ, và
-    con số cuối cùng gần như không đổi theo mức nhiễu loạn (mô hình ở 25 m:
-    3,71 % ở L1 và 3,70 % ở L5). Trung bình KHÔNG trọng số trên từng khối thì đi
-    từ 3,72 % lên 13,50 % — và chính nó mới là đại lượng quyết định bảo mật, vì
-    BB84 chưng cất khoá theo từng khối chứ không gộp cả phiên.
+WHY POOLED QBER DOES NOT SHOW TURBULENCE:
+    fpga_collect outputs total errors / total sifted bits, which is a WEIGHTED mean
+    by click count. Blocks in deep fades contribute very few clicks, so they are lightly
+    weighted, and the final number is almost unchanged by the turbulence level (model at 25 m:
+    3.71 % at L1 and 3.70 % at L5). The UNWEIGHTED mean over individual blocks goes
+    from 3.72 % to 13.50 % — and this is the quantity that dictates security, because
+    BB84 distills keys block by block rather than pooling the whole session.
 
-CHỈ BÁO PHỤ — CV(irrad):
-    h = h_s·h_o với E[h_s] = E[h_o] = 1 và hai biến độc lập, nên
+SECONDARY INDICATOR — CV(irrad):
+    h = h_s·h_o with E[h_s] = E[h_o] = 1 and two independent variables, so
         Var(h) = (1 + σ²_s)(1 + σ²_ho) − 1
-    Trường irrad báo về theo TỪNG CLICK (top_module.v, thang 128 = 1.0) nên
-    histogram của nó lấy mẫu đúng phân bố biên của h. Đại lượng này dùng được cả
-    với số liệu thu bằng bitstream cũ, khi thống kê theo khối chưa đo được.
+    The irrad field is reported PER CLICK (top_module.v, scale 128 = 1.0), so its
+    histogram samples the true marginal distribution of h. This metric can also be used
+    with data collected from the old bitstream, when per-block statistics could not be measured.
 """
 
 from __future__ import annotations
